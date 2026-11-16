@@ -22,10 +22,10 @@ const RawEnvSchema = z.object({
   QUEUE_MODE: z.enum(["appdb", "postgres", "redis"]).default("appdb"),
   REDIS_URL: z.string().optional(),
 
-  STORAGE_PROVIDER: z.enum(["local", "r2", "minio", "tigris"]).optional(),
+  STORAGE_PROVIDER: z.enum(["local", "r2", "minio", "tigris", "neon"]).optional(),
   LOCAL_STORAGE_DIR: z.string().default("./data/storage"),
   S3_ENDPOINT: z.string().optional(),
-  S3_REGION: z.string().default("auto"),
+  S3_REGION: z.string().optional(),
   S3_BUCKET: z.string().default("mc-csv-uploads"),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
@@ -33,6 +33,12 @@ const RawEnvSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === "true"),
+
+  // Neon Object Storage standard AWS env vars
+  AWS_ENDPOINT_URL_S3: z.string().optional(),
+  AWS_REGION: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
 
   WORKER_PORT: z
     .string()
@@ -46,9 +52,14 @@ const RawEnvSchema = z.object({
     .transform((v) => v === "true"),
 });
 
-export interface AppEnv extends Omit<z.infer<typeof RawEnvSchema>, "APP_DB_MODE" | "STORAGE_PROVIDER"> {
+export interface AppEnv
+  extends Omit<
+    z.infer<typeof RawEnvSchema>,
+    "APP_DB_MODE" | "STORAGE_PROVIDER" | "S3_REGION"
+  > {
   APP_DB_MODE: "sqlite" | "postgres";
-  STORAGE_PROVIDER: "local" | "r2" | "minio" | "tigris";
+  STORAGE_PROVIDER: "local" | "r2" | "minio" | "tigris" | "neon";
+  S3_REGION: string;
   isVercel: boolean;
 }
 
@@ -56,23 +67,47 @@ let cachedEnv: AppEnv | null = null;
 
 /**
  * Parses server environment variables once with smart cloud/local defaults.
- * Never import this file into Client Components.
+ * Supports both S3_* (R2/MinIO/Tigris) and AWS_* (Neon Object Storage).
  */
 export function getEnv(): AppEnv {
   if (!cachedEnv) {
     const raw = RawEnvSchema.parse(process.env);
     const hasPgUrl = Boolean(raw.DATABASE_URL && raw.DATABASE_URL.trim().length > 0);
-    const hasS3Creds = Boolean(
-      raw.S3_ENDPOINT &&
-        raw.S3_ENDPOINT.trim().length > 0 &&
-        raw.S3_ACCESS_KEY_ID &&
-        raw.S3_ACCESS_KEY_ID.trim().length > 0
+    const hasCustomS3 = Boolean(
+      raw.S3_ENDPOINT?.trim() && raw.S3_ACCESS_KEY_ID?.trim()
     );
+    const hasNeonS3 = Boolean(
+      raw.AWS_ENDPOINT_URL_S3?.trim() && raw.AWS_ACCESS_KEY_ID?.trim()
+    );
+
+    const provider =
+      raw.STORAGE_PROVIDER ??
+      (hasCustomS3 ? "r2" : hasNeonS3 ? "neon" : "local");
+
+    const effectiveEndpoint =
+      raw.S3_ENDPOINT?.trim() || raw.AWS_ENDPOINT_URL_S3?.trim() || undefined;
+    const effectiveAccessKey =
+      raw.S3_ACCESS_KEY_ID?.trim() || raw.AWS_ACCESS_KEY_ID?.trim() || undefined;
+    const effectiveSecretKey =
+      raw.S3_SECRET_ACCESS_KEY?.trim() ||
+      raw.AWS_SECRET_ACCESS_KEY?.trim() ||
+      undefined;
+    const effectiveRegion =
+      raw.S3_REGION?.trim() || raw.AWS_REGION?.trim() || "auto";
+    const effectiveForcePathStyle =
+      provider === "neon" ||
+      provider === "minio" ||
+      raw.S3_FORCE_PATH_STYLE === true;
 
     cachedEnv = {
       ...raw,
       APP_DB_MODE: raw.APP_DB_MODE ?? (hasPgUrl ? "postgres" : "sqlite"),
-      STORAGE_PROVIDER: raw.STORAGE_PROVIDER ?? (hasS3Creds ? "r2" : "local"),
+      STORAGE_PROVIDER: provider,
+      S3_ENDPOINT: effectiveEndpoint,
+      S3_ACCESS_KEY_ID: effectiveAccessKey,
+      S3_SECRET_ACCESS_KEY: effectiveSecretKey,
+      S3_REGION: effectiveRegion,
+      S3_FORCE_PATH_STYLE: effectiveForcePathStyle,
       isVercel: raw.VERCEL === "1",
     };
   }
