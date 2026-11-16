@@ -1,0 +1,1630 @@
+MASTER PROMPT: TELECOM QoS INTELLIGENCE & MEDIACORE CSV ANALYTICS PLATFORM
+
+1. YOUR ROLE AND RESPONSIBILITY
+
+Act as a senior software architect, principal full-stack developer, data engineering specialist, telecom messaging analytics expert, UI/UX designer, database architect, and DevOps engineer.
+
+Your responsibility is to architect, develop, test, and deliver a production-ready web application for analyzing large-scale SMS messaging records exported from MediaCore in CSV format.
+
+Do not approach this as a basic CSV upload and chart-generation project.
+
+Build a complete Telecom Messaging Quality of Service (QoS) Intelligence Platform that can process millions of records, identify service degradation, analyze delivery performance, expose problematic operators and providers, and provide actionable intelligence to the operations team.
+
+Think like an engineer developing an internal enterprise-grade telecom analytics product.
+
+Prioritize:
+
+- Data accuracy.
+- Processing reliability.
+- Scalability.
+- Analytical depth.
+- Performance.
+- User experience.
+- Security.
+- Maintainability.
+- Deployment readiness.
+
+Do not generate a static UI with dummy charts and pretend that the backend works.
+
+Every major feature must be connected to real data processing and actual database queries.
+
+---
+
+2. ORIGINAL BUSINESS PROBLEM — COMPLETE CONTEXT
+
+We currently use MediaCore to manage and track SMS messaging activities.
+
+MediaCore provides an export functionality that allows us to download CSV files containing messaging transaction records.
+
+These records contain information about incoming and outgoing messages, their statuses, operators, providers, routing details, identifiers, geographical information, rejection reasons, and other transaction-level metadata.
+
+The problem is that the exported data is extremely large.
+
+Expected data volume:
+
+- Minimum records: 2 million.
+- Maximum records: 10 million.
+- Typical CSV file size: 50 MB–200 MB.
+- Upload frequency: Daily.
+- Multiple uploads must be supported.
+- Historical datasets must be retained and queryable.
+
+Currently, the team manually opens these CSV files, applies filters, calculates percentages, checks different operators and providers, and investigates failed or rejected messages.
+
+This process is time-consuming, inefficient, and prone to human error.
+
+It becomes difficult to identify:
+
+1. Which OP is experiencing a high failure rate.
+2. Which TP is accepting or rejecting messages.
+3. Which provider/applicant is affecting service quality.
+4. Which OP ANI or TP ANI is associated with problematic traffic.
+5. Which countries and states have degraded messaging performance.
+6. Which rejection reasons are occurring frequently.
+7. Which routes are underperforming.
+8. Whether delivery performance is improving or deteriorating.
+9. Which specific combination of OP, TP, country, ANI, and message status is responsible for failures.
+10. Whether the overall quality of service is declining over time.
+
+These issues affect service delivery, increase message failures and potentially increase bounce rates, ultimately affecting customer satisfaction and company reputation.
+
+THE OBJECTIVE
+
+Develop a centralized web-based analytics dashboard where the team can upload MediaCore CSV exports and automatically transform millions of transaction records into meaningful, interactive analytical visualizations.
+
+The platform should help the team understand:
+
+WHAT is failing?
+
+WHERE is it failing?
+
+WHO is responsible?
+
+WHY is it failing?
+
+WHEN did the degradation begin?
+
+HOW MUCH traffic is affected?
+
+WHAT should the team investigate first?
+
+---
+
+3. COMPLETE TECHNOLOGY STACK
+
+Use the following technology stack as the preferred architecture.
+
+Frontend
+
+- Next.js (React framework).
+- TypeScript.
+- Tailwind CSS.
+- shadcn/ui.
+- Apache ECharts for interactive analytical visualizations.
+- TanStack Query for server-state management.
+- TanStack Table for large-data tables.
+- React Hook Form with Zod validation.
+- Lucide React icons.
+
+Backend
+
+- Node.js.
+- TypeScript.
+- Next.js API routes or a dedicated Node.js API service.
+- REST APIs.
+- Zod for validation.
+- Streaming-based CSV processing.
+
+Storage
+
+- Cloudflare R2 for original CSV file storage.
+- Use direct-to-R2 uploads through secure presigned URLs.
+- Store original files separately from processed analytical data.
+
+Analytical Database
+
+- ClickHouse (prefer ClickHouse Cloud or an appropriately managed deployment).
+
+ClickHouse must be the primary database for high-volume analytical queries.
+
+Reasons:
+
+- Columnar storage.
+- Efficient aggregations.
+- Fast filtering across millions of records.
+- Group-by operations.
+- Time-series analysis.
+- High-volume ingestion.
+- Analytical query performance.
+
+Application Database
+
+- PostgreSQL.
+
+Use PostgreSQL for:
+
+- User accounts.
+- Authentication.
+- Role management.
+- Upload history.
+- Dataset metadata.
+- Processing jobs.
+- Application settings.
+- Audit logs.
+- Saved filters.
+- Investigation notes.
+
+Do not use Cloudflare R2 as a SQL database. R2 is object storage.
+
+Background Processing
+
+- BullMQ.
+- Redis.
+- Dedicated Node.js worker process.
+- Streaming CSV parser such as csv-parse.
+- Cloudflare R2 SDK.
+
+The worker must process large files independently of the frontend and normal serverless request lifecycle.
+
+Deployment
+
+- GitHub for source control.
+- Vercel for frontend and suitable API endpoints.
+- Cloudflare R2 for object storage.
+- Managed ClickHouse for analytics.
+- Managed PostgreSQL.
+- Redis-backed job queue.
+- Railway, Fly.io, or another persistent container platform for the processing worker.
+
+Important: Do not force heavy CSV processing into Vercel serverless functions. Separate the long-running ingestion worker from the frontend deployment.
+
+---
+
+4. COMPLETE SYSTEM ARCHITECTURE
+
+Design the system around the following pipeline.
+
+CSV UPLOAD
+|
+v
+Frontend Upload Interface
+|
+v
+Secure Upload Authorization API
+|
+v
+Cloudflare R2
+|
+v
+Create Processing Job
+|
+v
+Redis / BullMQ Queue
+|
+v
+Dedicated Node.js Processing Worker
+|
+v
+CSV Streaming Parser
+|
+v
+Header Detection and Schema Mapping
+|
+v
+Data Validation and Normalization
+|
+v
+Data Quality Checks
+|
+v
+Deduplication and Error Handling
+|
+v
+Bulk Ingestion into ClickHouse
+|
+v
+Update Dataset Processing Status
+|
+v
+Analytics API
+|
+v
+Dashboard Charts, KPIs, Filters and Reports
+
+Design the complete architecture with clearly separated responsibilities.
+
+The frontend must never need to download the original CSV to analyze it.
+
+The browser must never load millions of records into memory.
+
+All large-scale filtering, aggregation, grouping, sorting, and analytical calculations must happen at the database/query layer.
+
+---
+
+5. CSV UPLOAD AND PROCESSING ENGINE
+
+This is one of the most important modules.
+
+Build a robust CSV ingestion system.
+
+Upload requirements
+
+- Support files between 50 MB and 200 MB initially.
+- Support datasets containing 2M–10M records.
+- Support multiple uploads.
+- Support daily uploads.
+- Display upload progress.
+- Display file size.
+- Display filename.
+- Display upload timestamp.
+- Display upload owner.
+- Display processing status.
+- Display record count.
+- Display processing duration.
+- Display successful, rejected, and skipped row counts.
+- Provide a processing history.
+
+Use multipart upload or an appropriate resumable upload strategy when beneficial.
+
+Upload the file directly to Cloudflare R2 rather than passing the entire file through a Vercel API request.
+
+Processing stages
+
+Create clearly defined processing stages:
+
+1. Upload initiated.
+2. Uploading.
+3. Upload completed.
+4. File validation.
+5. CSV parsing.
+6. Schema mapping.
+7. Data normalization.
+8. Validation.
+9. Database ingestion.
+10. Analytics preparation.
+11. Processing completed.
+12. Failed or partially completed.
+
+Show these stages in the UI.
+
+Streaming processing
+
+CRITICAL:
+
+Never read an entire 200 MB CSV into application memory.
+
+Use streaming parsing and configurable batches.
+
+The worker should:
+
+- Read CSV incrementally.
+- Process records in configurable chunks.
+- Validate each batch.
+- Normalize values.
+- Insert batches into ClickHouse.
+- Record processing checkpoints.
+- Update processing progress.
+- Handle malformed rows.
+- Continue processing valid rows when recoverable errors occur.
+- Report unrecoverable errors clearly.
+
+Use bounded memory and configurable concurrency.
+
+Make the process restartable where practical.
+
+Implement retries with exponential backoff.
+
+Use job IDs, dataset IDs, and idempotency keys to prevent duplicate processing.
+
+If a job fails halfway through, do not blindly reinsert previously committed batches.
+
+Provide safe recovery and rollback/reprocessing mechanisms.
+
+Data quality report
+
+After each upload, display:
+
+- Total rows detected.
+- Valid rows.
+- Invalid rows.
+- Duplicate rows.
+- Rows skipped.
+- Missing critical fields.
+- Unknown status values.
+- Malformed timestamps.
+- Unrecognized column names.
+- Processing duration.
+- Final ingestion status.
+
+Allow users to download a processing error report.
+
+---
+
+6. DYNAMIC CSV SCHEMA MAPPING
+
+Do not assume that MediaCore CSV exports will always have exactly the same headers or column ordering.
+
+The system must inspect the actual CSV headers.
+
+Implement a schema mapping layer.
+
+Important business fields include:
+
+- OP Name.
+- TP Name.
+- OP ANI.
+- TP ANI.
+- Country.
+- State.
+- Message Status.
+- Message Reason.
+- Applicant.
+- Direction.
+- Message Timestamp.
+- Source.
+- Destination.
+- Message ID.
+- Transaction ID.
+- Route.
+- Any additional available MediaCore fields.
+
+These are logical field names, not guaranteed CSV headers.
+
+Create a configurable mapping interface.
+
+For example:
+
+CSV COLUMN                  SYSTEM FIELD
+
+op_name                     OP_NAME
+operator                    OP_NAME
+origin_operator             OP_NAME
+
+tp_name                     TP_NAME
+provider                    TP_NAME
+termination_provider        TP_NAME
+
+Allow multiple CSV headers to map to the same logical field.
+
+If an essential field is unavailable, notify the user.
+
+If an optional field is missing, continue processing and disable only the analytical features that depend on that field.
+
+Preserve unknown columns where practical, subject to configurable storage and schema rules.
+
+Provide a preview of the first 20–50 rows before confirming an unfamiliar schema.
+
+Save reusable schema mapping profiles.
+
+Do not silently guess ambiguous column mappings.
+
+---
+
+7. CORE ANALYTICS DASHBOARD
+
+Create a minimal, professional, enterprise-grade dashboard.
+
+The dashboard must contain multiple analytical sections.
+
+A. GLOBAL KPI OVERVIEW
+
+At the top, show summary cards:
+
+1. Total Messages.
+2. Total Successful Messages.
+3. Total Failed Messages.
+4. Total Rejected Messages.
+5. Pending Messages.
+6. Success Rate.
+7. Failure Rate.
+8. Rejection Rate.
+9. Unique OP Count.
+10. Unique TP Count.
+11. Countries Covered.
+12. Applicants Covered.
+
+All KPIs must be calculated dynamically from the selected dataset and filters.
+
+Do not hardcode values.
+
+Define message status categories using configurable status mapping.
+
+Unknown statuses must be separately visible.
+
+Avoid counting intermediate or pending statuses as either successful or failed unless the business rules explicitly define them that way.
+
+B. OP-WISE PERFORMANCE ANALYSIS
+
+Create a dedicated OP analytics section.
+
+Analyze:
+
+- OP Name.
+- Total message volume.
+- Successful messages.
+- Failed messages.
+- Rejected messages.
+- Success percentage.
+- Failure percentage.
+- Rejection percentage.
+- Most common rejection reason.
+- Associated TP performance.
+- Associated countries.
+- Historical performance.
+
+Charts:
+
+1. OP-wise total traffic.
+2. OP-wise success vs failure.
+3. OP-wise failure percentage.
+4. Top 10 worst-performing OPs.
+5. OP performance over time.
+6. OP and TP comparison matrix.
+
+Allow clicking an OP to drill down into its associated TPs and records.
+
+C. TP / PROVIDER PERFORMANCE ANALYSIS
+
+This is another primary module.
+
+Analyze:
+
+- TP Name.
+- Applicant.
+- Total traffic.
+- Accepted messages.
+- Rejected messages.
+- Failed messages.
+- Success rate.
+- Rejection rate.
+- Failure contribution.
+- Country-wise performance.
+- OP-wise performance.
+- Route-wise performance.
+- Rejection reasons.
+
+Build:
+
+1. TP-wise traffic chart.
+2. TP-wise rejection chart.
+3. TP-wise success rate ranking.
+4. Top 10 worst-performing TPs.
+5. Applicant-wise performance comparison.
+6. TP vs OP matrix.
+7. TP performance trend.
+8. Provider failure contribution chart.
+
+Provide a detailed TP profile page or drill-down view.
+
+Important: Do not assume TP and Applicant are interchangeable. Preserve their separate meanings.
+
+D. OP ANI / TP ANI ANALYSIS
+
+Analyze both identifiers independently.
+
+Display:
+
+- OP ANI.
+- TP ANI.
+- Associated OP.
+- Associated TP.
+- Applicant.
+- Country.
+- Total messages.
+- Failed messages.
+- Rejected messages.
+- Success rate.
+- Failure rate.
+
+Identify ANI values associated with unusually high failure rates.
+
+Provide:
+
+- Top problematic OP ANIs.
+- Top problematic TP ANIs.
+- ANI-wise failure distribution.
+- ANI and rejection reason relationship.
+- ANI and country relationship.
+
+Provide search functionality for exact ANI values.
+
+Support partial matching only where appropriate and avoid exposing unnecessary personal or sensitive data.
+
+E. COUNTRY-WISE PERFORMANCE
+
+Create geographical analytics.
+
+Analyze:
+
+- Country.
+- State.
+- OP.
+- TP.
+- Applicant.
+- Total traffic.
+- Success rate.
+- Failure rate.
+- Rejection rate.
+
+Charts:
+
+1. Country-wise message volume.
+2. Country-wise failure rate.
+3. Country-wise success rate.
+4. Country and TP matrix.
+5. Country and OP matrix.
+6. State-wise performance.
+7. Geographic failure distribution.
+
+Use a map visualization when reliable country/state mapping data is available.
+
+Unknown or unmapped locations must not be silently assigned to another geography.
+
+F. MESSAGE STATUS ANALYSIS
+
+Analyze every distinct message status found in the source CSV.
+
+Create:
+
+- Status distribution.
+- Status-wise total messages.
+- Status by OP.
+- Status by TP.
+- Status by Applicant.
+- Status by Country.
+- Status over time.
+
+Allow administrators to configure the classification of raw statuses into:
+
+- Success.
+- Failure.
+- Rejected.
+- Pending.
+- Other.
+- Unknown.
+
+Keep raw status values intact.
+
+G. REJECTION REASON INTELLIGENCE
+
+If a reason or error-description field is available, analyze it extensively.
+
+Display:
+
+- Most common rejection reasons.
+- Rejection reason frequency.
+- Reason by OP.
+- Reason by TP.
+- Reason by Applicant.
+- Reason by Country.
+- Reason by ANI.
+- Reason trends over time.
+
+Build a ranked failure reason table.
+
+Normalize whitespace and case for grouping where appropriate, but preserve the original reason text.
+
+Do not merge distinct technical error codes simply because their descriptions look similar.
+
+Allow the team to investigate each reason and its underlying transaction records.
+
+---
+
+8. ADVANCED MULTI-DIMENSIONAL FILTER ENGINE
+
+THIS IS A CRITICAL FEATURE.
+
+Develop a powerful, reusable global filter engine.
+
+The team must be able to combine multiple filters simultaneously.
+
+Supported filters:
+
+- Dataset.
+- Date range.
+- OP Name.
+- TP Name.
+- OP ANI.
+- TP ANI.
+- Country.
+- State.
+- Message Status.
+- Message Reason.
+- Applicant.
+- Direction.
+- Route.
+- Any other mapped field.
+
+Example:
+
+Country = India
+
+AND OP = Operator A
+
+AND TP = Provider B
+
+AND Applicant = Company C
+
+AND Status = Rejected
+
+AND OP ANI = Specific Number
+
+The system must return the exact matching results.
+
+Filter UX
+
+Implement:
+
+- Multi-select dropdowns.
+- Searchable dropdowns.
+- Date range selection.
+- Dynamic dependent filters.
+- Active filter chips.
+- Clear individual filter.
+- Clear all filters.
+- Apply button where appropriate.
+- Saved filter presets.
+- Shareable filter configurations.
+
+Filters must work consistently across:
+
+- KPI cards.
+- Charts.
+- Tables.
+- Drill-down pages.
+- Export functionality.
+
+Do not create separate inconsistent filtering logic for individual charts.
+
+Implement one centralized filter/query model.
+
+Dependent filters
+
+Example:
+
+If a user selects India, the OP/TP and State filter options should ideally reflect available values within the current dataset and relevant filter context.
+
+Prevent the filter system from generating unnecessary full-table queries.
+
+Use server-side filtering and efficient distinct-value queries.
+
+Do not download all distinct values from millions of rows without pagination, search or sensible limits.
+
+---
+
+9. ADVANCED PERFORMANCE AND DEGRADATION DETECTION
+
+Build an intelligence layer that helps the operations team detect problems proactively.
+
+A. Historical comparison
+
+Allow comparisons between:
+
+- Today vs Yesterday.
+- Last 7 days vs Previous 7 days.
+- Last 30 days vs Previous 30 days.
+- Selected dataset vs Previous dataset.
+- Custom date ranges.
+
+Only perform comparisons when the datasets have compatible time coverage and comparable semantics.
+
+Show:
+
+- Traffic change.
+- Success rate change.
+- Failure rate change.
+- Rejection rate change.
+- Provider performance change.
+- Operator performance change.
+
+B. Degradation detection
+
+Detect significant changes in failure rates.
+
+Example:
+
+Previous failure rate: 4%.
+
+Current failure rate: 17%.
+
+The system should identify this as a potential degradation event.
+
+Implement configurable detection thresholds and minimum sample-size requirements.
+
+Avoid raising alerts because of tiny traffic volumes.
+
+C. Top contributors
+
+Identify which OP, TP, Applicant, Country, ANI or rejection reason contributes most to failed traffic.
+
+Show both:
+
+- Absolute failed-message count.
+- Percentage contribution to total failures.
+
+Do not confuse percentage contribution with failure rate.
+
+D. Anomaly detection
+
+Implement a practical initial anomaly detection system using historical baselines.
+
+Detect:
+
+- Sudden traffic drops.
+- Sudden rejection spikes.
+- Unexpected changes in success rates.
+- Unusual provider performance.
+- Unusual country-level failure rates.
+- Repeated rejection reason spikes.
+
+Every alert must explain:
+
+1. What changed.
+2. When it changed.
+3. Which dimension is affected.
+4. Previous baseline.
+5. Current value.
+6. Number of affected records.
+7. Suggested investigation direction.
+
+Do not make unsupported claims about the cause of a failure.
+
+Distinguish correlation from confirmed root cause.
+
+---
+
+10. MESSAGE RECORD EXPLORER
+
+Create a dedicated page for transaction-level investigation.
+
+Users must be able to inspect individual records after applying filters.
+
+Requirements:
+
+- Server-side pagination.
+- Server-side sorting.
+- Search.
+- Column visibility controls.
+- Adjustable page size.
+- Row details drawer.
+- Copy relevant identifiers.
+- Export filtered records.
+- Display raw and normalized values where appropriate.
+
+Do not attempt to render 10 million rows in one browser table.
+
+Use cursor pagination or another stable pagination strategy for large datasets.
+
+Make sure the displayed records correspond exactly to the selected filters.
+
+Provide an efficient query path for retrieving individual records.
+
+---
+
+11. DATASET AND UPLOAD MANAGEMENT
+
+Create a dedicated Upload History section.
+
+Display:
+
+- File name.
+- Dataset ID.
+- Upload date.
+- Uploading user.
+- Original file size.
+- Total records.
+- Successfully processed records.
+- Failed records.
+- Processing duration.
+- Processing status.
+- Schema mapping profile.
+- Data coverage period.
+
+Support:
+
+- Upload a new dataset.
+- Reprocess a failed dataset.
+- Delete a dataset.
+- Archive a dataset.
+- Inspect processing logs.
+- View data quality reports.
+- Compare datasets.
+
+Deletion must be carefully handled across object storage, analytical records, and metadata.
+
+Use safe deletion workflows and audit logs.
+
+Prevent accidental deletion of the wrong dataset.
+
+Dataset selection
+
+Support:
+
+1. Individual dataset analysis.
+2. Multiple selected datasets.
+3. Historical combined analysis.
+
+Make sure combined datasets do not accidentally duplicate records.
+
+Preserve dataset-level lineage.
+
+Allow the team to distinguish records by upload source and date.
+
+---
+
+12. REPORTING AND EXPORT
+
+Provide export capabilities for:
+
+- Filtered message records.
+- OP performance reports.
+- TP performance reports.
+- Applicant performance reports.
+- Country reports.
+- Rejection reason reports.
+- Daily QoS summaries.
+- Historical comparisons.
+
+Support CSV export initially.
+
+Consider XLSX and PDF reporting as additional capabilities.
+
+Large exports must run as asynchronous jobs.
+
+Generate secure, time-limited download links.
+
+Never attempt to generate extremely large files synchronously in a normal browser request.
+
+---
+
+13. USER INTERFACE AND DESIGN SYSTEM
+
+The visual design must be minimal, professional, clean, and suitable for daily enterprise operations.
+
+Avoid an unnecessarily colorful interface.
+
+Avoid excessive gradients, animations, shadows, and decorative elements.
+
+Design direction
+
+Take inspiration from modern analytical platforms and enterprise SaaS products.
+
+Visual characteristics:
+
+- Minimal layout.
+- Neutral background.
+- Clear typography.
+- Consistent spacing.
+- Clean cards.
+- Thin borders.
+- Subtle separators.
+- Professional data tables.
+- Readable charts.
+- Carefully selected typography.
+
+Suggested fonts:
+
+- Inter.
+- Geist Sans.
+- IBM Plex Sans.
+
+Theme support
+
+Implement a working Light Mode / Dark Mode toggle.
+
+The preference should persist across sessions.
+
+Suggested layout
+
+SIDEBAR:
+
+- Overview.
+- Upload CSV.
+- OP Analytics.
+- TP Analytics.
+- Applicant Analytics.
+- ANI Analytics.
+- Geographic Analytics.
+- Rejection Intelligence.
+- Performance Monitoring.
+- Message Explorer.
+- Historical Comparison.
+- Upload History.
+- Reports.
+- Settings.
+
+TOP BAR:
+
+- Current dataset selector.
+- Date range selector.
+- Global filters.
+- Notifications.
+- Theme toggle.
+- User profile.
+
+MAIN CONTENT:
+
+- KPI cards.
+- Analytical charts.
+- Performance tables.
+- Failure breakdowns.
+- Degradation alerts.
+- Drill-down access.
+
+Use responsive layouts, but prioritize desktop because the main users will be working with analytical dashboards and large tables.
+
+All components must have appropriate loading, empty, error and success states.
+
+---
+
+14. DATABASE DESIGN
+
+Design a normalized application database and an optimized analytical database.
+
+PostgreSQL tables
+
+At minimum:
+
+users
+roles
+user_roles
+datasets
+upload_jobs
+schema_profiles
+schema_mappings
+processing_logs
+data_quality_reports
+saved_filters
+audit_logs
+user_preferences
+alert_configurations
+investigation_notes
+
+Include timestamps, IDs, indexes, relationships and appropriate constraints.
+
+ClickHouse analytical schema
+
+Design an optimized message records table.
+
+Suggested logical columns:
+
+- dataset_id
+- upload_id
+- message_id
+- transaction_id
+- event_timestamp
+- op_name
+- tp_name
+- op_ani
+- tp_ani
+- country
+- state
+- raw_status
+- normalized_status
+- reason
+- applicant
+- direction
+- route
+- raw additional attributes where applicable
+
+Use suitable ClickHouse data types.
+
+Evaluate:
+
+- MergeTree engine.
+- Partitioning strategy.
+- Sorting key.
+- Primary index.
+- LowCardinality for appropriate categorical fields.
+- Materialized views where beneficial.
+- Aggregate tables where beneficial.
+- Data retention strategy.
+
+Do not create excessive indexes on every column.
+
+Optimize based on the actual query patterns.
+
+Provide a migration strategy.
+
+---
+
+15. ANALYTICAL DEFINITIONS AND DATA ACCURACY
+
+Define all metrics centrally.
+
+Do not implement different mathematical definitions in different components.
+
+Important formulas:
+
+Total Messages = Count of eligible message records.
+
+Success Rate =
+Successful Messages / Messages with a valid terminal outcome × 100.
+
+Failure Rate =
+Failed Messages / Messages with a valid terminal outcome × 100.
+
+Rejection Rate =
+Rejected Messages / Messages with a valid terminal outcome × 100.
+
+Failure Contribution =
+Failed Messages in a selected dimension / Total Failed Messages × 100.
+
+Traffic Share =
+Messages in a selected dimension / Total Eligible Messages × 100.
+
+Important:
+
+If rejected messages are included within the failed category, do not add them twice when calculating total failures.
+
+Create configurable business rules for message statuses.
+
+If a record's final outcome cannot be determined, classify it appropriately as pending or unknown.
+
+Document the denominator used by each metric.
+
+Ensure that aggregation results are mathematically consistent.
+
+When data is missing or a field is unavailable, display N/A instead of manufacturing a value.
+
+---
+
+16. SECURITY AND PRIVACY
+
+Implement:
+
+- Secure authentication.
+- Role-based access control.
+- Protected API endpoints.
+- Secure R2 access.
+- Presigned uploads and downloads.
+- Environment-variable secrets.
+- Input validation.
+- SQL/query parameterization.
+- Upload file type validation.
+- CSV formula injection protection during exports.
+- Audit logging.
+- Rate limiting.
+- Secure error handling.
+
+ANI values and message identifiers may contain sensitive information.
+
+Provide configurable masking of sensitive identifiers.
+
+Do not expose R2 credentials, database credentials, or secret keys to the browser.
+
+Use HTTPS.
+
+Never log unnecessary sensitive record contents.
+
+---
+
+17. PERFORMANCE REQUIREMENTS
+
+The system must be engineered for the expected workload.
+
+Target:
+
+- CSV uploads of 50–200 MB.
+- 2–10 million records per dataset.
+- Multiple datasets.
+- Multiple dashboard users.
+- Concurrent analytical queries.
+- Fast filtering and aggregation.
+
+Performance goals, subject to infrastructure and workload benchmarking:
+
+- Dashboard initial load: approximately 2–4 seconds with cached summaries.
+- Common analytical queries: target 1–3 seconds.
+- Complex analytical queries: target under 5 seconds where practical.
+- Upload and processing: asynchronous, with visible progress.
+- Browser memory: independent of full CSV size.
+- No synchronous 10-million-row processing in API requests.
+
+These are engineering targets, not guaranteed performance promises.
+
+Implement:
+
+- Query optimization.
+- Appropriate caching.
+- Database connection pooling.
+- Batch ingestion.
+- Bounded concurrency.
+- Query timeouts.
+- Pagination.
+- Materialized aggregations.
+- Processing metrics.
+- Load testing.
+
+Benchmark against representative datasets before claiming performance.
+
+---
+
+18. MONITORING AND ERROR HANDLING
+
+Create a complete error management system.
+
+Handle:
+
+- Invalid CSV files.
+- Missing headers.
+- Duplicate records.
+- Invalid timestamps.
+- Unexpected data types.
+- Empty fields.
+- Unknown statuses.
+- R2 upload failures.
+- Database connectivity issues.
+- Worker crashes.
+- Queue failures.
+- Partial ingestion.
+- Query timeouts.
+- Export failures.
+- Authentication failures.
+
+Errors should be actionable and understandable.
+
+For example:
+
+Instead of:
+
+"Processing failed."
+
+Display:
+
+"CSV processing stopped because the expected message timestamp column could not be mapped. Please review the schema mapping and retry."
+
+Implement:
+
+- Structured application logs.
+- Processing logs.
+- Job retry tracking.
+- Health checks.
+- Error monitoring.
+- Worker monitoring.
+- Database monitoring.
+
+---
+
+19. TESTING REQUIREMENTS
+
+Develop a proper testing strategy.
+
+Unit tests
+
+- Metric calculations.
+- Status normalization.
+- Schema mapping.
+- Data validation.
+- Filter construction.
+- Error handling.
+
+Integration tests
+
+- R2 upload.
+- Queue processing.
+- CSV parsing.
+- ClickHouse ingestion.
+- Analytics API.
+- Dataset deletion.
+
+End-to-end tests
+
+- Login.
+- Upload CSV.
+- Map headers.
+- Process dataset.
+- View dashboard.
+- Apply multiple filters.
+- Open drill-down records.
+- Export results.
+
+Performance tests
+
+Test with generated datasets containing:
+
+- 100,000 records.
+- 1 million records.
+- 5 million records.
+- 10 million records.
+
+Use realistic distributions of OP, TP, ANI, status, country and rejection reasons.
+
+Verify that the resulting KPI calculations match independently computed expected values.
+
+Do not use synthetic data as real production data.
+
+---
+
+20. ADDITIONAL FEATURES TO CONSIDER
+
+Design the architecture so these features can be added without rewriting the entire application.
+
+1. Automated daily CSV ingestion.
+2. Email alerts for significant QoS degradation.
+3. Slack or Microsoft Teams notifications.
+4. Scheduled daily QoS reports.
+5. Provider performance scorecards.
+6. Custom alert thresholds.
+7. Saved team investigation workspaces.
+8. Provider comparison reports.
+9. Route benchmarking.
+10. Historical anomaly detection.
+11. API access for external reporting tools.
+12. AI-assisted investigation summaries.
+
+For AI-assisted analysis, use the actual aggregated analytical results as context.
+
+Example:
+
+"The rejection rate for Provider A increased from 4% to 15% during the selected period. The increase is concentrated in Country B and is associated primarily with rejection reason C."
+
+AI must never invent explanations or claim that a particular provider is responsible without supporting evidence.
+
+Make this an optional feature, not a dependency for the core analytics platform.
+
+---
+
+21. DEVELOPMENT APPROACH — BUILD IN PHASES
+
+Do not attempt to generate the entire application in one uncontrolled code-generation step.
+
+Follow this development sequence.
+
+PHASE 1 — Architecture and Planning
+
+Before writing application code:
+
+1. Understand the complete business requirement.
+2. Define application architecture.
+3. Define the database architecture.
+4. Define the CSV ingestion pipeline.
+5. Define API contracts.
+6. Define the logical data model.
+7. Define the dashboard structure.
+8. Define the security model.
+9. Identify technical risks.
+10. Prepare the implementation roadmap.
+
+Provide architecture diagrams using Mermaid.
+
+Explain why each major technology has been selected.
+
+PHASE 2 — Project Foundation
+
+Create:
+
+- Next.js project.
+- TypeScript configuration.
+- Tailwind CSS.
+- shadcn/ui.
+- Folder architecture.
+- Environment configuration.
+- Database connections.
+- Authentication foundation.
+- Application layout.
+- Sidebar.
+- Theme management.
+
+Ensure the project runs locally.
+
+PHASE 3 — Upload and Ingestion
+
+Implement:
+
+- R2 integration.
+- Secure direct uploads.
+- Upload history.
+- Background queue.
+- CSV streaming worker.
+- Schema mapping.
+- Data validation.
+- ClickHouse ingestion.
+- Progress tracking.
+- Error reporting.
+
+Test with large CSV files.
+
+PHASE 4 — Analytics Engine
+
+Implement:
+
+- Centralized metric calculations.
+- Analytics APIs.
+- Filter engine.
+- OP analysis.
+- TP analysis.
+- Applicant analysis.
+- ANI analysis.
+- Country/state analysis.
+- Status analysis.
+- Rejection analysis.
+
+PHASE 5 — Dashboard Development
+
+Build the actual dashboard.
+
+Connect every chart and KPI to backend APIs.
+
+Implement:
+
+- Global filters.
+- Drill-downs.
+- Message explorer.
+- Historical comparisons.
+- Upload history.
+- Reports.
+
+PHASE 6 — QoS Intelligence
+
+Implement:
+
+- Degradation detection.
+- Historical baselines.
+- Anomaly detection.
+- Failure contributor ranking.
+- Alerts.
+- Investigation summaries.
+
+PHASE 7 — Testing and Optimization
+
+Perform:
+
+- Unit testing.
+- Integration testing.
+- End-to-end testing.
+- Large-file processing tests.
+- Load testing.
+- Security testing.
+- Query optimization.
+
+PHASE 8 — Deployment
+
+Prepare:
+
+- GitHub repository.
+- Vercel deployment.
+- Cloudflare R2 configuration.
+- ClickHouse deployment.
+- PostgreSQL deployment.
+- Redis configuration.
+- Processing worker deployment.
+- Environment variables.
+- Production build.
+- Health checks.
+- Deployment documentation.
+
+Provide a complete deployment guide.
+
+---
+
+22. PROJECT FOLDER STRUCTURE
+
+Propose a maintainable modular architecture.
+
+A suggested starting point:
+
+/src
+/app
+/dashboard
+/upload
+/analytics
+/op-analytics
+/tp-analytics
+/applicant-analytics
+/ani-analytics
+/geographic-analytics
+/rejection-intelligence
+/message-explorer
+/history
+/reports
+/settings
+/api
+
+/components
+/layout
+/dashboard
+/charts
+/filters
+/tables
+/upload
+/common
+
+/modules
+/authentication
+/datasets
+/csv-ingestion
+/schema-mapping
+/analytics
+/operators
+/providers
+/geography
+/rejections
+/alerts
+/reporting
+
+/lib
+/database
+/storage
+/validation
+/security
+/metrics
+/utils
+
+/types
+/hooks
+/config
+
+/worker
+/src
+/jobs
+/processors
+/parsers
+/validators
+/normalizers
+/repositories
+/utils
+
+/database
+/postgres
+/clickhouse
+
+/tests
+/unit
+/integration
+/e2e
+/performance
+
+/docs
+
+Adapt this structure when necessary, but preserve clear separation of responsibilities.
+
+---
+
+23. DEVELOPMENT RULES — STRICT INSTRUCTIONS
+
+Follow these rules throughout development.
+
+1. Do not create a frontend-only prototype.
+2. Do not use fake data for production dashboard functionality.
+3. Do not hardcode analytical results.
+4. Do not process millions of rows inside browser memory.
+5. Do not load entire CSV files into Node.js memory.
+6. Do not execute long-running processing inside Vercel serverless functions.
+7. Do not use Cloudflare R2 as a SQL database.
+8. Do not make database credentials available to the frontend.
+9. Do not silently ignore malformed records.
+10. Do not silently map ambiguous CSV columns.
+11. Do not confuse accepted, delivered, rejected and failed statuses.
+12. Do not double-count failed and rejected records.
+13. Do not make unsupported root-cause claims.
+14. Do not create filters that only work visually.
+15. Do not leave buttons with non-functional actions.
+16. Do not implement placeholder APIs and describe them as complete.
+17. Do not sacrifice data accuracy for visual appearance.
+18. Keep code modular, reusable, typed and documented.
+19. Use environment variables for all secrets.
+20. Ensure all important operations have error handling.
+21. Keep the application deployable throughout development.
+22. Maintain a README and update it as implementation progresses.
+
+If a requirement cannot be implemented immediately, explicitly document the limitation and provide an implementation plan.
+
+Never claim a feature is complete unless it has actually been implemented and tested.
+
+---
+
+24. FINAL DELIVERABLES
+
+At completion, provide:
+
+1. Complete application source code.
+2. Frontend implementation.
+3. Backend implementation.
+4. CSV processing worker.
+5. PostgreSQL schema and migrations.
+6. ClickHouse schema and migrations.
+7. R2 integration.
+8. API documentation.
+9. Authentication and authorization.
+10. Complete analytical dashboard.
+11. Global filter engine.
+12. Message explorer.
+13. Historical comparisons.
+14. QoS intelligence module.
+15. Error handling.
+16. Test suites.
+17. Performance test results.
+18. Environment variable template.
+19. Local development instructions.
+20. GitHub setup instructions.
+21. Vercel deployment guide.
+22. Worker deployment guide.
+23. Database setup guide.
+24. Production operations documentation.
+
+The final application must be usable by an actual telecom operations team.
+
+---
+
+25. IMPORTANT: ORIGINAL USER REQUIREMENTS — PRESERVE AS PROJECT CONTEXT
+
+The following is the original business requirement and must remain part of the project's permanent context.
+
+"I use MediaCore to export CSV files containing all messaging record entries, including incoming and outgoing SMS transactions, their statuses, OP names, TP names, OP ANI, TP ANI, countries, states, rejection reasons, applicants and other transaction details.
+
+The files contain approximately 2 million to 10 million records and are generally between 50 MB and 200 MB.
+
+Currently, I have to manually apply filters and calculate different figures to understand the performance of messaging services.
+
+I want a dashboard where I can upload these daily CSV exports, have them processed automatically, and view multiple interactive charts and analytics.
+
+My primary focus is OP Name, TP Name, OP ANI, TP ANI, Country, State, Message Status, Reason, and Applicant.
+
+I need to identify faulty routes, problematic operators, providers responsible for rejected traffic, geographical performance issues, and factors that are degrading the quality of my messaging services.
+
+I need a powerful filter system that allows me to apply multiple conditions together and fetch exactly the matching data.
+
+The dashboard should be minimal, professional, easy to use, and support both light and dark modes.
+
+My preferred technologies are Node.js, GitHub, Vercel and Cloudflare R2, with an appropriate database for storing and analyzing the CSV data.
+
+I want to track uploads, dashboard usage, daily performance, and historical information.
+
+The primary purpose is to improve Quality of Service, reduce delivery failures, identify problems faster, improve coordination among team members, and protect the company's service quality and reputation."
+
+Treat this original requirement as the permanent business context of the application.
+
+---
+
+26. YOUR FIRST RESPONSE AND WORKING METHOD
+
+Before generating code, I want you to produce a professional technical blueprint.
+
+Your first response must contain:
+
+A. Your understanding of the business problem.
+
+B. The recommended final architecture.
+
+C. A system architecture diagram.
+
+D. Complete technology stack with reasoning.
+
+E. Database design.
+
+F. CSV ingestion and processing strategy.
+
+G. Analytical modules and KPI definitions.
+
+H. Global filtering architecture.
+
+I. Frontend UI/UX layout.
+
+J. Security and performance strategy.
+
+K. Development roadmap.
+
+L. Estimated infrastructure considerations and potential operational costs, with assumptions clearly stated.
+
+M. Potential risks and how to mitigate them.
+
+N. Any important questions that must be resolved before implementation.
+
+Do not start generating thousands of lines of code before establishing the architecture.
+
+After presenting the blueprint, proceed to implementation in clearly defined phases.
+
+Maintain context across all development stages.
+
+Keep track of completed features, pending features, architectural decisions, bugs, and technical debt.
+
+If development is interrupted, use the existing codebase and project documentation to continue rather than starting over.
+
+Work as a coordinated engineering teammate, not merely a code generator.
+
+Your ultimate goal is to deliver a reliable, scalable, accurate, production-ready Telecom Messaging QoS Intelligence Platform that our operations team can depend on every day.
+
+THE PRIORITY IS NOT JUST TO DISPLAY DATA. THE PRIORITY IS TO TRANSFORM MILLIONS OF MESSAGING RECORDS INTO ACTIONABLE BUSINESS INTELLIGENCE THAT HELPS US IMPROVE OUR QUALITY OF SERVICE, IDENTIFY DEGRADATION, MAKE BETTER ROUTING DECISIONS, AND STRENGTHEN OUR COMPANY'S REPUTATION.
+
+Begin with the technical blueprint now.

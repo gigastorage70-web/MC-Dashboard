@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+worker/node_modules/
+
+# Next.js build output
+.next/
+out/
+dist/
+worker/dist/
+*.tsbuildinfo
+
+# Local runtime databases & uploaded files (never commit operational data)
+data/
+*.sqlite*
+*.duckdb*
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Large data exports & temp files (never commit production CSVs)
+*.csv
+*.csv.gz
+*.tsv
+tmp/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.log

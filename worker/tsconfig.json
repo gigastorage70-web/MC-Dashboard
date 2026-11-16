@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "./dist",
+    "rootDir": "..",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "../src/lib/config/env.ts",
+    "../src/lib/database/app-db.ts",
+    "../src/lib/database/postgres.ts",
+    "../src/lib/database/clickhouse.ts",
+    "../src/lib/storage/index.ts",
+    "../src/lib/storage/s3.ts",
+    "../src/lib/metrics/definitions.ts",
+    "../src/modules/csv-ingestion/**/*.ts",
+    "../src/modules/schema-mapping/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
