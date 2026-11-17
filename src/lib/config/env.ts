@@ -80,6 +80,10 @@ export interface AppEnv
 
 let cachedEnv: AppEnv | null = null;
 
+export function resetEnvCache(): void {
+  cachedEnv = null;
+}
+
 /**
  * Parses server environment variables once with smart cloud/local defaults.
  * Supports S3_* (R2/MinIO/Tigris), AWS_* (Neon Object Storage), and Tinybird.

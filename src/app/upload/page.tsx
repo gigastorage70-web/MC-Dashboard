@@ -17,6 +17,8 @@ import {
   type LogicalField,
   type SchemaInspectionResult,
 } from "@/modules/schema-mapping/constants";
+import { useGlobalFilters } from "@/components/filters/FilterContext";
+import { LiveStorageWidget } from "@/components/storage/LiveStorageWidget";
 
 interface SchemaProfile {
   id: string;
@@ -79,6 +81,7 @@ async function readFirst64KbText(file: File): Promise<string> {
 }
 
 export default function UploadCsvPage() {
+  const { refreshDatasets } = useGlobalFilters();
   const [file, setFile] = useState<File | null>(null);
   const [datasetName, setDatasetName] = useState("");
   const [profiles, setProfiles] = useState<SchemaProfile[]>([]);
@@ -93,6 +96,7 @@ export default function UploadCsvPage() {
   const [uploading, setUploading] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<JobProgress | null>(null);
+  const [storageRefreshKey, setStorageRefreshKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -117,12 +121,14 @@ export default function UploadCsvPage() {
       setJobProgress(data);
       if (["COMPLETED", "PARTIAL", "FAILED"].includes(data.job.queue_status)) {
         clearInterval(timer);
+        setStorageRefreshKey((k) => k + 1);
+        void refreshDatasets();
       }
     };
     void poll();
     const timer = setInterval(() => void poll(), 2000);
     return () => clearInterval(timer);
-  }, [activeJobId]);
+  }, [activeJobId, refreshDatasets]);
 
   const inspectFile = async (targetFile: File, overrideDelim?: string) => {
     setError(null);
@@ -271,6 +277,7 @@ export default function UploadCsvPage() {
       }
 
       setActiveJobId(presignData.jobId);
+      setStorageRefreshKey((k) => k + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -288,6 +295,12 @@ export default function UploadCsvPage() {
           Previews only the first 64 KB in-browser, streams 50–200+ MB files directly to storage, and ingests asynchronously via the streaming worker.
         </p>
       </div>
+
+      {/* Live Storage Capacity & Dataset Management Widget */}
+      <LiveStorageWidget
+        refreshKey={storageRefreshKey}
+        onDatasetChanged={() => void refreshDatasets()}
+      />
 
       {/* File Selection Card */}
       <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">

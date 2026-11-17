@@ -365,3 +365,40 @@ export async function checkTinybirdHealth(): Promise<{
     };
   }
 }
+
+export async function getTinybirdStorageStats(): Promise<{
+  totalBytes: number;
+  totalRows: number;
+  datasources: Array<{ name: string; bytes: number; rows: number }>;
+}> {
+  const { apiUrl, token } = assertTinybirdConfig();
+  const res = await fetchWithRetry(
+    `${apiUrl}/v0/datasources`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    },
+    2
+  );
+  if (!res.ok) {
+    throw new Error(`Tinybird stats check failed (HTTP ${res.status})`);
+  }
+  const json = (await res.json()) as {
+    datasources?: Array<{
+      name: string;
+      statistics?: { bytes?: number; row_count?: number };
+    }>;
+  };
+  const datasources = (json.datasources ?? []).map((d) => ({
+    name: d.name,
+    bytes: Number(d.statistics?.bytes ?? 0),
+    rows: Number(d.statistics?.row_count ?? 0),
+  }));
+  return {
+    totalBytes: datasources.reduce((acc, d) => acc + d.bytes, 0),
+    totalRows: datasources.reduce((acc, d) => acc + d.rows, 0),
+    datasources,
+  };
+}

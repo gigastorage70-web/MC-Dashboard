@@ -39,7 +39,15 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/datasets", { cache: "no-store" });
       if (!res.ok) return;
       const data = (await res.json()) as { datasets: DatasetOption[] };
-      setDatasets(data.datasets ?? []);
+      const list = data.datasets ?? [];
+      setDatasets(list);
+      const validIds = new Set(list.map((d) => d.id));
+      setFilter((prev) => {
+        if (prev.datasetIds.length === 0) return prev;
+        const nextIds = prev.datasetIds.filter((id) => validIds.has(id));
+        if (nextIds.length === prev.datasetIds.length) return prev;
+        return { ...prev, datasetIds: nextIds };
+      });
     } catch {
       // ignore if unauthenticated or DB booting
     }

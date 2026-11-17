@@ -2,7 +2,13 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Archive, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import {
+  DatasetDeleteModal,
+  type DeleteModalTarget,
+} from "@/components/datasets/DatasetDeleteModal";
+import { useGlobalFilters } from "@/components/filters/FilterContext";
 
 interface UploadHistoryRow {
   job_id: string;
@@ -28,10 +34,13 @@ interface UploadHistoryRow {
 }
 
 export default function UploadHistoryPage() {
+  const router = useRouter();
+  const { refreshDatasets } = useGlobalFilters();
   const [uploads, setUploads] = useState<UploadHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState<UploadHistoryRow | null>(null);
-  const [confirmName, setConfirmName] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<DeleteModalTarget | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const loadUploads = async () => {
@@ -71,23 +80,33 @@ export default function UploadHistoryPage() {
     await loadUploads();
   };
 
-  const handleDelete = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDelete = async () => {
     if (!deleteTarget) return;
     setActionError(null);
-    const res = await fetch(`/api/datasets/${deleteTarget.dataset_id}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmName }),
-    });
-    const d = (await res.json()) as { error?: string };
-    if (!res.ok) {
-      setActionError(d.error ?? "Dataset deletion failed");
-      return;
+    setStatusMessage(null);
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/datasets/${deleteTarget.datasetId}`, {
+        method: "DELETE",
+      });
+      const d = (await res.json()) as {
+        error?: string;
+        datasetName?: string;
+        deletedStorageObjects?: number;
+      };
+      if (!res.ok) {
+        setActionError(d.error ?? "Dataset deletion failed");
+        return;
+      }
+      setDeleteTarget(null);
+      setStatusMessage(
+        `Deleted "${d.datasetName ?? deleteTarget.datasetName}" (${d.deletedStorageObjects ?? 0} stored file(s) removed). Caches purged & indexes refreshed.`
+      );
+      await Promise.all([loadUploads(), refreshDatasets()]);
+      router.refresh();
+    } finally {
+      setDeleting(false);
     }
-    setDeleteTarget(null);
-    setConfirmName("");
-    await loadUploads();
   };
 
   return (
@@ -118,6 +137,12 @@ export default function UploadHistoryPage() {
           </Link>
         </div>
       </div>
+
+      {statusMessage ? (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+          {statusMessage}
+        </div>
+      ) : null}
 
       {actionError ? (
         <div className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
@@ -225,11 +250,14 @@ export default function UploadHistoryPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setDeleteTarget(u);
-                          setConfirmName("");
-                        }}
-                        title="Safely Delete Dataset"
+                        onClick={() =>
+                          setDeleteTarget({
+                            datasetId: u.dataset_id,
+                            datasetName: u.dataset_name,
+                            fileName: u.file_name,
+                          })
+                        }
+                        title="Delete Dataset"
                         className="rounded border border-[var(--border-subtle)] p-1.5 text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -243,50 +271,12 @@ export default function UploadHistoryPage() {
         </table>
       </div>
 
-      {/* Safe Deletion Confirmation Modal */}
-      {deleteTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <form
-            onSubmit={handleDelete}
-            className="w-full max-w-md space-y-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5"
-          >
-            <h2 className="text-sm font-semibold text-rose-600 dark:text-rose-400">
-              Confirm Safe Dataset Deletion
-            </h2>
-            <p className="text-xs text-[var(--text-secondary)]">
-              This permanently removes ClickHouse analytical rows, raw CSV &amp; error files in storage, and PostgreSQL metadata. Type{" "}
-              <strong className="text-[var(--text-primary)]">
-                {deleteTarget.dataset_name}
-              </strong>{" "}
-              to confirm.
-            </p>
-            <input
-              type="text"
-              required
-              value={confirmName}
-              onChange={(e) => setConfirmName(e.target.value)}
-              placeholder={deleteTarget.dataset_name}
-              className="w-full rounded-md border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2 text-xs"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={confirmName !== deleteTarget.dataset_name}
-                className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-              >
-                Delete Permanently
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <DatasetDeleteModal
+        target={deleteTarget}
+        deleting={deleting}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 }

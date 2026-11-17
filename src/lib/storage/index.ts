@@ -4,8 +4,10 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import {
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -183,6 +185,130 @@ export async function getStorageObjectStream(params: {
     stream: obj.Body as Readable,
     contentLength: Number(obj.ContentLength ?? 0),
   };
+}
+
+export interface StoredObjectInfo {
+  key: string;
+  sizeBytes: number;
+  lastModified: string | null;
+}
+
+function walkLocalFiles(dir: string, rootDir: string, out: StoredObjectInfo[]): void {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkLocalFiles(full, rootDir, out);
+    } else if (entry.isFile()) {
+      const stat = fs.statSync(full);
+      const rel = path.relative(rootDir, full).replace(/\\/g, "/");
+      out.push({
+        key: rel,
+        sizeBytes: stat.size,
+        lastModified: stat.mtime.toISOString(),
+      });
+    }
+  }
+}
+
+export async function listStorageObjects(
+  bucket: string,
+  prefix = ""
+): Promise<StoredObjectInfo[]> {
+  const env = getEnv();
+  if (env.STORAGE_PROVIDER === "local") {
+    const baseDir = path.resolve(process.cwd(), env.LOCAL_STORAGE_DIR);
+    const items: StoredObjectInfo[] = [];
+    walkLocalFiles(baseDir, baseDir, items);
+    return prefix ? items.filter((item) => item.key.startsWith(prefix)) : items;
+  }
+
+  const s3 = getStorageClient();
+  const items: StoredObjectInfo[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const res = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix || undefined,
+        ContinuationToken: continuationToken,
+      })
+    );
+    for (const obj of res.Contents ?? []) {
+      if (!obj.Key) continue;
+      items.push({
+        key: obj.Key,
+        sizeBytes: Number(obj.Size ?? 0),
+        lastModified: obj.LastModified ? obj.LastModified.toISOString() : null,
+      });
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return items;
+}
+
+export async function deleteStorageKeys(
+  bucket: string,
+  keys: string[]
+): Promise<number> {
+  const uniqueKeys = Array.from(new Set(keys.filter((k) => k && k.trim().length > 0)));
+  if (uniqueKeys.length === 0) return 0;
+
+  const env = getEnv();
+  if (env.STORAGE_PROVIDER === "local") {
+    let deleted = 0;
+    for (const key of uniqueKeys) {
+      const full = resolveLocalStoragePath(key);
+      if (fs.existsSync(full)) {
+        fs.unlinkSync(full);
+        deleted += 1;
+      }
+    }
+    return deleted;
+  }
+
+  const s3 = getStorageClient();
+  let deleted = 0;
+  for (let i = 0; i < uniqueKeys.length; i += 1000) {
+    const chunk = uniqueKeys.slice(i, i + 1000);
+    try {
+      const res = await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: {
+            Objects: chunk.map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        })
+      );
+      deleted += chunk.length - (res.Errors?.length ?? 0);
+    } catch {
+      for (const Key of chunk) {
+        await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key })).catch(() => undefined);
+        deleted += 1;
+      }
+    }
+  }
+  return deleted;
+}
+
+export async function deleteStoragePrefix(
+  bucket: string,
+  prefix: string
+): Promise<number> {
+  if (
+    !prefix ||
+    (!prefix.startsWith("uploads/") && !prefix.startsWith("error-reports/"))
+  ) {
+    throw new Error(`Unsafe storage prefix delete blocked: "${prefix}"`);
+  }
+  const objects = await listStorageObjects(bucket, prefix);
+  return deleteStorageKeys(
+    bucket,
+    objects.map((o) => o.key)
+  );
 }
 
 export async function deleteStorageObject(
