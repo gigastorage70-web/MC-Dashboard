@@ -486,6 +486,11 @@ export async function queryExplorerMessages(
     isDuck
       ? `strftime(${c}, '%Y-%m-%d %H:%M:%S.%f')`
       : `toString(${c})`;
+  const dlrTsExpr = isDuck
+    ? `CASE WHEN dlr_timestamp IS NOT NULL THEN strftime(dlr_timestamp, '%Y-%m-%d %H:%M:%S.%f') ELSE NULL END`
+    : `toString(dlr_timestamp)`;
+  const costCastExpr = (c: string) =>
+    isDuck ? `CAST(${c} AS DOUBLE)` : `CAST(${c} AS Nullable(Float64))`;
 
   const limitParam = isDuck ? "$pageLimit" : "{pageLimit:UInt32}";
 
@@ -493,8 +498,8 @@ export async function queryExplorerMessages(
     SELECT
       dataset_id,
       message_row_id,
-      ${tsFormat("event_timestamp")} AS event_timestamp,
-      CASE WHEN dlr_timestamp IS NOT NULL THEN ${tsFormat("dlr_timestamp")} ELSE NULL END AS dlr_timestamp,
+      ${tsFormat("event_timestamp")} AS event_ts_formatted,
+      ${dlrTsExpr} AS dlr_ts_formatted,
       dlr_latency_ms,
       op_name,
       tp_name,
@@ -515,8 +520,8 @@ export async function queryExplorerMessages(
       message_id,
       op_host,
       tp_host,
-      CAST(cost_in AS DOUBLE) AS cost_in,
-      CAST(cost_out AS DOUBLE) AS cost_out,
+      ${costCastExpr("cost_in")} AS cost_in,
+      ${costCastExpr("cost_out")} AS cost_out,
       op_currency,
       extra_attributes
     FROM ${table}
@@ -531,15 +536,20 @@ export async function queryExplorerMessages(
   });
 
   const hasMore = rows.length > limit;
-  const sliced: Record<string, unknown>[] = rows.slice(0, limit).map((r) => ({
-    ...r,
-    op_ani: maskIdentifier(String(r.op_ani ?? ""), options.maskPii),
-    tp_ani: maskIdentifier(String(r.tp_ani ?? ""), options.maskPii),
-    destination_number: maskIdentifier(
-      String(r.destination_number ?? ""),
-      options.maskPii
-    ),
-  }));
+  const sliced: Record<string, unknown>[] = rows.slice(0, limit).map((r) => {
+    const { event_ts_formatted, dlr_ts_formatted, ...rest } = r;
+    return {
+      ...rest,
+      event_timestamp: event_ts_formatted ?? null,
+      dlr_timestamp: dlr_ts_formatted ?? null,
+      op_ani: maskIdentifier(String(r.op_ani ?? ""), options.maskPii),
+      tp_ani: maskIdentifier(String(r.tp_ani ?? ""), options.maskPii),
+      destination_number: maskIdentifier(
+        String(r.destination_number ?? ""),
+        options.maskPii
+      ),
+    };
+  });
 
   const last = sliced[sliced.length - 1];
 
