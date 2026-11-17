@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { commandAnalytics, getAnalyticsEngine } from "@/lib/database/analytics-db";
 import { appQuery } from "@/lib/database/app-db";
+import { deleteTinybirdDatasetRows } from "@/lib/database/tinybird";
 import { deleteStorageObject } from "@/lib/storage";
 import {
   requireApiSession,
@@ -101,8 +102,9 @@ export async function DELETE(
     [datasetId]
   );
 
-  // Delete analytical rows across active analytical engine (DuckDB or ClickHouse)
-  if (getAnalyticsEngine() === "duckdb") {
+  // Delete analytical rows across active analytical engine (DuckDB, Tinybird, or ClickHouse)
+  const engine = getAnalyticsEngine();
+  if (engine === "duckdb") {
     await commandAnalytics("DELETE FROM sms_records WHERE dataset_id = $datasetId", {
       datasetId,
     });
@@ -112,6 +114,12 @@ export async function DELETE(
     await commandAnalytics("DELETE FROM ingestion_batches WHERE dataset_id = $datasetId", {
       datasetId,
     });
+  } else if (engine === "tinybird") {
+    await Promise.all([
+      deleteTinybirdDatasetRows("sms_records", datasetId),
+      deleteTinybirdDatasetRows("sms_hourly_rollup", datasetId),
+      deleteTinybirdDatasetRows("ingestion_batches", datasetId),
+    ]);
   } else {
     await commandAnalytics(
       "ALTER TABLE mc_analytics.sms_records DELETE WHERE dataset_id = {datasetId:UUID} SETTINGS mutations_sync = 1",

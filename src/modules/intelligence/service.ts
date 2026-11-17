@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
-import { queryAnalytics } from "@/lib/database/analytics-db";
+import {
+  getAnalyticsTableName,
+  isDuckDbEngine,
+  queryAnalytics,
+} from "@/lib/database/analytics-db";
 import { appQuery } from "@/lib/database/app-db";
 import type { GlobalFilterSpec } from "@/modules/analytics/filter-schema";
 import { buildAnalyticsWhere } from "@/modules/analytics/query-builder";
@@ -133,10 +137,8 @@ export async function evaluateDegradationAnomalies(
   const criticalThreshold = options?.criticalThresholdPct ?? 25;
 
   const { engine, whereSql, queryParams } = buildAnalyticsWhere(filter);
-  const isDuck = engine === "duckdb";
-  const rollupTable = isDuck
-    ? "sms_hourly_rollup"
-    : "mc_analytics.sms_hourly_rollup";
+  const isDuck = isDuckDbEngine(engine);
+  const rollupTable = getAnalyticsTableName(engine, "sms_hourly_rollup");
 
   const sql = isDuck
     ? `
@@ -204,22 +206,24 @@ export async function evaluateDegradationAnomalies(
         )
         GROUP BY dimension_type, dimension_value, bucket_hour
         HAVING term_cnt >= {minBucketSample:UInt64}
-      )
+      ),
+      max_b AS (SELECT max(bucket_hour) AS max_hour FROM hourly)
       SELECT
-        dimension_type,
-        dimension_value,
-        min(bucket_hour) AS window_start,
-        max(bucket_hour) AS window_end,
-        avgIf(unsuc_cnt / term_cnt * 100, bucket_hour < (SELECT max(bucket_hour) FROM hourly)) AS baseline_rate,
-        argMax(unsuc_cnt / term_cnt * 100, bucket_hour) AS latest_rate,
-        argMax(unsuc_cnt, bucket_hour) AS latest_affected,
-        argMax(term_cnt, bucket_hour) AS latest_terminal
+        hourly.dimension_type AS dimension_type,
+        hourly.dimension_value AS dimension_value,
+        toString(min(hourly.bucket_hour)) AS window_start,
+        toString(max(hourly.bucket_hour)) AS window_end,
+        avgIf(hourly.unsuc_cnt / hourly.term_cnt * 100, hourly.bucket_hour < max_b.max_hour) AS baseline_rate,
+        argMax(hourly.unsuc_cnt / hourly.term_cnt * 100, hourly.bucket_hour) AS latest_rate,
+        argMax(hourly.unsuc_cnt, hourly.bucket_hour) AS latest_affected,
+        argMax(hourly.term_cnt, hourly.bucket_hour) AS latest_terminal
       FROM hourly
-      GROUP BY dimension_type, dimension_value
+      CROSS JOIN max_b
+      GROUP BY hourly.dimension_type, hourly.dimension_value
       HAVING count() >= 2
         AND latest_terminal >= {minSample:UInt64}
-        AND (latest_rate - baseline_rate >= {spikePct:Float64} OR latest_rate >= {criticalThreshold:Float64})
-      ORDER BY (latest_rate - baseline_rate) DESC
+        AND (latest_rate - coalesce(baseline_rate, 0) >= {spikePct:Float64} OR latest_rate >= {criticalThreshold:Float64})
+      ORDER BY (latest_rate - coalesce(baseline_rate, 0)) DESC
       LIMIT 30
     `;
 

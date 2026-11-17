@@ -1,0 +1,32 @@
+DESCRIPTION > Pre-aggregated hourly SMS QoS rollups for sub-second KPIs and breakdown dashboards
+
+SCHEMA >
+    `dataset_id` UUID `json:$.dataset_id`,
+    `upload_id` UUID `json:$.upload_id`,
+    `bucket_hour` DateTime('UTC') `json:$.bucket_hour`,
+    `op_name` LowCardinality(String) DEFAULT '' `json:$.op_name`,
+    `tp_name` LowCardinality(String) DEFAULT '' `json:$.tp_name`,
+    `applicant` LowCardinality(String) DEFAULT '' `json:$.applicant`,
+    `country` LowCardinality(String) DEFAULT '' `json:$.country`,
+    `state_region` LowCardinality(String) DEFAULT '' `json:$.state_region`,
+    `route` LowCardinality(String) DEFAULT '' `json:$.route`,
+    `raw_status` LowCardinality(String) DEFAULT '' `json:$.raw_status`,
+    `normalized_status` LowCardinality(String) DEFAULT 'UNKNOWN' `json:$.normalized_status`,
+    `is_terminal` UInt8 DEFAULT 0 `json:$.is_terminal`,
+    `reason_normalized` LowCardinality(String) DEFAULT '' `json:$.reason_normalized`,
+    `total_count` UInt64 DEFAULT 0 `json:$.total_count`,
+    `success_count` UInt64 DEFAULT 0 `json:$.success_count`,
+    `failed_count` UInt64 DEFAULT 0 `json:$.failed_count`,
+    `rejected_count` UInt64 DEFAULT 0 `json:$.rejected_count`,
+    `pending_count` UInt64 DEFAULT 0 `json:$.pending_count`,
+    `unknown_count` UInt64 DEFAULT 0 `json:$.unknown_count`,
+    `other_count` UInt64 DEFAULT 0 `json:$.other_count`,
+    `terminal_count` UInt64 DEFAULT 0 `json:$.terminal_count`,
+    `cost_in_sum` Float64 DEFAULT 0 `json:$.cost_in_sum`,
+    `cost_out_sum` Float64 DEFAULT 0 `json:$.cost_out_sum`,
+    `dlr_latency_ms_sum` Int64 DEFAULT 0 `json:$.dlr_latency_ms_sum`,
+    `dlr_latency_count` UInt64 DEFAULT 0 `json:$.dlr_latency_count`
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(bucket_hour)"
+ENGINE_SORTING_KEY "dataset_id, bucket_hour, op_name, tp_name, country, normalized_status, raw_status, route, applicant, state_region, reason_normalized, is_terminal"

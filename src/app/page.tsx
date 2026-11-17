@@ -169,8 +169,7 @@ export default function OverviewDashboardPage() {
 
       {error ? (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          {error} — Start the unified platform via{" "}
-          <code className="rounded bg-black/10 px-1 py-0.5">npm run dev</code> so the DuckDB analytics worker is active on port 4001.
+          {error}
         </div>
       ) : null}
 

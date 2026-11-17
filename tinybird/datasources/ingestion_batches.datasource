@@ -1,0 +1,10 @@
+DESCRIPTION > Idempotency ledger tracking committed ingestion batches per CSV upload job
+
+SCHEMA >
+    `upload_id` UUID `json:$.upload_id`,
+    `dataset_id` UUID `json:$.dataset_id`,
+    `batch_id` UInt32 `json:$.batch_id`,
+    `row_count` UInt32 `json:$.row_count`
+
+ENGINE "MergeTree"
+ENGINE_SORTING_KEY "upload_id, batch_id"

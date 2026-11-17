@@ -29,9 +29,7 @@ export function getPostgresPool(): Pool {
   };
 
   const pool = new Pool(config);
-  if (env.NODE_ENV !== "production") {
-    globalForPg.pgPool = pool;
-  }
+  globalForPg.pgPool = pool;
   return pool;
 }
 

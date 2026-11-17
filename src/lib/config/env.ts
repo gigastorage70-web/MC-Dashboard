@@ -10,9 +10,22 @@ const RawEnvSchema = z.object({
   SQLITE_PATH: z.string().default("./data/app.sqlite"),
   DATABASE_URL: z.string().optional(),
 
-  ANALYTICS_ENGINE: z.enum(["duckdb", "clickhouse"]).default("duckdb"),
+  ANALYTICS_ENGINE: z.enum(["duckdb", "clickhouse", "tinybird"]).optional(),
   DUCKDB_PATH: z.string().default("./data/analytics.duckdb"),
   DUCKDB_SERVER_URL: z.string().default("http://127.0.0.1:4001"),
+
+  TINYBIRD_API_URL: z
+    .string()
+    .default("https://api.tinybird.co")
+    .transform((v) => v.trim().replace(/\/+$/, "")),
+  TINYBIRD_TOKEN: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim().length > 0 ? v.trim() : undefined)),
+  TINYBIRD_EVENTS_WAIT: z
+    .string()
+    .optional()
+    .transform((v) => v !== "false"),
 
   CLICKHOUSE_URL: z.string().default("http://localhost:8123"),
   CLICKHOUSE_DATABASE: z.string().default("mc_analytics"),
@@ -44,7 +57,7 @@ const RawEnvSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v ? Number(v) : 4001)),
-  WORKER_WEBHOOK_URL: z.string().default("http://127.0.0.1:4001/trigger"),
+  WORKER_WEBHOOK_URL: z.string().optional(),
   WORKER_WEBHOOK_SECRET: z.string().optional(),
   DEFAULT_MASK_PII: z
     .string()
@@ -55,11 +68,13 @@ const RawEnvSchema = z.object({
 export interface AppEnv
   extends Omit<
     z.infer<typeof RawEnvSchema>,
-    "APP_DB_MODE" | "STORAGE_PROVIDER" | "S3_REGION"
+    "APP_DB_MODE" | "STORAGE_PROVIDER" | "S3_REGION" | "ANALYTICS_ENGINE" | "WORKER_WEBHOOK_URL"
   > {
+  ANALYTICS_ENGINE: "duckdb" | "clickhouse" | "tinybird";
   APP_DB_MODE: "sqlite" | "postgres";
   STORAGE_PROVIDER: "local" | "r2" | "minio" | "tigris" | "neon";
   S3_REGION: string;
+  WORKER_WEBHOOK_URL: string;
   isVercel: boolean;
 }
 
@@ -67,7 +82,7 @@ let cachedEnv: AppEnv | null = null;
 
 /**
  * Parses server environment variables once with smart cloud/local defaults.
- * Supports both S3_* (R2/MinIO/Tigris) and AWS_* (Neon Object Storage).
+ * Supports S3_* (R2/MinIO/Tigris), AWS_* (Neon Object Storage), and Tinybird.
  */
 export function getEnv(): AppEnv {
   if (!cachedEnv) {
@@ -79,6 +94,9 @@ export function getEnv(): AppEnv {
     const hasNeonS3 = Boolean(
       raw.AWS_ENDPOINT_URL_S3?.trim() && raw.AWS_ACCESS_KEY_ID?.trim()
     );
+
+    const effectiveEngine: AppEnv["ANALYTICS_ENGINE"] =
+      raw.ANALYTICS_ENGINE ?? (raw.TINYBIRD_TOKEN ? "tinybird" : "duckdb");
 
     const provider =
       raw.STORAGE_PROVIDER ??
@@ -99,8 +117,23 @@ export function getEnv(): AppEnv {
       provider === "minio" ||
       raw.S3_FORCE_PATH_STYLE === true;
 
+    const neonBranchId = process.env.NEON_BRANCH_ID?.trim();
+    const neonHostSuffix = process.env.NEON_FUNCTION_HOST_SUFFIX?.trim();
+    const autoNeonWebhookUrl =
+      neonBranchId && neonHostSuffix
+        ? `https://${neonBranchId}-csvworker${neonHostSuffix}/trigger`
+        : "";
+
+    const effectiveWebhookUrl =
+      raw.WORKER_WEBHOOK_URL?.trim() ||
+      autoNeonWebhookUrl ||
+      (effectiveEngine === "duckdb" && raw.VERCEL !== "1"
+        ? "http://127.0.0.1:4001/trigger"
+        : "");
+
     cachedEnv = {
       ...raw,
+      ANALYTICS_ENGINE: effectiveEngine,
       APP_DB_MODE: raw.APP_DB_MODE ?? (hasPgUrl ? "postgres" : "sqlite"),
       STORAGE_PROVIDER: provider,
       S3_ENDPOINT: effectiveEndpoint,
@@ -108,6 +141,7 @@ export function getEnv(): AppEnv {
       S3_SECRET_ACCESS_KEY: effectiveSecretKey,
       S3_REGION: effectiveRegion,
       S3_FORCE_PATH_STYLE: effectiveForcePathStyle,
+      WORKER_WEBHOOK_URL: effectiveWebhookUrl,
       isVercel: raw.VERCEL === "1",
     };
   }

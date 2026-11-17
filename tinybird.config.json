@@ -1,0 +1,7 @@
+{
+  "dev_mode": "branch",
+  "folder": "tinybird",
+  "include": [
+    "tinybird/datasources"
+  ]
+}

@@ -6,7 +6,7 @@ Enterprise-grade messaging Quality of Service (QoS) intelligence platform engine
 
 - [x] **Phase 1 — Architecture & Planning:** Empirical audit of `xdr_all_tps.csv`, Technical Blueprint ([`docs/ARCHITECTURE_BLUEPRINT.md`](docs/ARCHITECTURE_BLUEPRINT.md)), API Contracts, Logical Data Model, SQLite/DuckDB & PostgreSQL/ClickHouse schemas.
 - [x] **Phase 2 — Project Foundation:** Zero-Docker embedded runtime (`node:sqlite` + `DuckDB` + local presigned vault), scrypt + JWT Auth/RBAC, User Preferences, Settings, App Shell, Light/Dark mode.
-- [x] **Phase 3 — CSV Upload & Streaming Ingestion Engine:** 64 KB header probe & dynamic schema mapper, reusable schema profiles, direct presigned upload, bounded-memory `csv-parse` worker with batch checkpoint recovery & downloadable error CSV reports.
+- [x] **Phase 3 — CSV Upload & Streaming Ingestion Engine:** 64 KB header probe & dynamic schema mapper, reusable schema profiles, direct presigned upload,  bounded-memory `csv-parse` worker with batch checkpoint recovery & downloadable error CSV reports.
 - [x] **Phase 4 — Centralized Analytics Engine & Filter API:** Dual-dialect DuckDB/ClickHouse query builder, `sms_hourly_rollup` routing, dependent facet dropdowns, centralized status/rate formulas.
 - [x] **Phase 5 — Interactive ECharts Dashboard & Message Explorer:** Overview (12 KPIs + time series), OP, TP, Applicant, ANI, Geographic, Rejection Intelligence, keyset-cursor Message Explorer, Upload History, and Reports.
 - [x] **Phase 6 — QoS Intelligence:** Period/Dataset comparison, baseline degradation & anomaly scan (`min_sample_size` guarded), Alert Acknowledge/Resolve workflow, and Investigation Notes.
@@ -14,13 +14,13 @@ Enterprise-grade messaging Quality of Service (QoS) intelligence platform engine
 
 ## Zero-Docker \$0 Architecture (Single-Command Launch)
 
-| Layer | Zero-Docker Default (\$0, No External Services) | Optional Cloud Scale-Up (Swap via `.env`) |
-|---|---|---|
-| **Frontend & BFF** | Next.js 15 App Router + Apache ECharts + TanStack | Vercel / Container Cluster |
-| **App Metadata & Queue** | Built-in `node:sqlite` (WAL mode, zero install) | Neon / Managed PostgreSQL |
-| **Columnar Analytics** | Embedded **DuckDB** (columnar OLAP via Worker HTTP bridge) | ClickHouse Cloud |
-| **Object Storage** | Local Presigned Streaming Vault (`./data/storage`) | Cloudflare R2 / Tigris |
-| **CSV Ingestion** | Dedicated Node.js streaming worker (`csv-parse`, bounded memory) | Persistent Worker Container |
+| Layer | Zero-Docker Local Mode ($0) | Cloud-Only Independent Stack ($0, No Card, No PC) | Enterprise Scale-Up (Swap via `.env`) |
+|---|---|---|---|
+| **Frontend & BFF** | Next.js 15 + ECharts + TanStack | **Vercel Hobby** | Vercel / Container Cluster |
+| **App Metadata & Queue** | Built-in `node:sqlite` (WAL) | **Neon Free Postgres** (`1 GB`) | Managed PostgreSQL |
+| **Columnar Analytics** | Embedded **DuckDB** (`4001`) | **Tinybird Free** (Managed ClickHouse, `10 GB`) | ClickHouse Cloud |
+| **Object Storage** | Local Presigned Vault (`./data/storage`) | **Neon Object Storage** (`5 GB`, `mc-csv-uploads`) | Cloudflare R2 / Tigris |
+| **CSV Ingestion** | Local Node.js worker (`worker/`) | **Neon Functions** (`functions/csvworker`, `2048 MiB`, `15m`) | Persistent Worker Container |
 
 ## Quick Start (Zero Docker, 1 Command)
 

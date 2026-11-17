@@ -1,4 +1,8 @@
-import { getAnalyticsEngine, type AnalyticsEngine } from "../../lib/database/analytics-db";
+import {
+  getAnalyticsEngine,
+  isDuckDbEngine,
+  type AnalyticsEngine,
+} from "../../lib/database/analytics-db";
 import type { GlobalFilterSpec } from "./filter-schema";
 
 export interface AnalyticsWhereResult {
@@ -39,7 +43,7 @@ export function buildAnalyticsWhere(
   }
 ): AnalyticsWhereResult {
   const engine = options?.engine ?? getAnalyticsEngine();
-  const isDuck = engine === "duckdb";
+  const isDuck = isDuckDbEngine(engine);
   const useRawTable =
     Boolean(options?.forceRawTable) || requiresRawRecordsTable(filter);
   const timeColumn = useRawTable ? "event_timestamp" : "bucket_hour";

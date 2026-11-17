@@ -1,4 +1,8 @@
-import { queryAnalytics } from "@/lib/database/analytics-db";
+import {
+  getAnalyticsTableName,
+  isDuckDbEngine,
+  queryAnalytics,
+} from "@/lib/database/analytics-db";
 import {
   computeFailureContributionPct,
   computeQoSKpis,
@@ -49,16 +53,14 @@ export function maskIdentifier(value: string, shouldMask: boolean): string {
   return trimmed;
 }
 
-function getTableName(engine: "duckdb" | "clickhouse", useRaw: boolean): string {
-  const base = useRaw ? "sms_records" : "sms_hourly_rollup";
-  return engine === "duckdb" ? base : `mc_analytics.${base}`;
-}
-
 export async function queryGlobalKpis(
   filter: GlobalFilterSpec
 ): Promise<GlobalKpiSummary> {
   const { engine, whereSql, queryParams, useRawTable } = buildAnalyticsWhere(filter);
-  const table = getTableName(engine, useRawTable);
+  const table = getAnalyticsTableName(
+    engine,
+    useRawTable ? "sms_records" : "sms_hourly_rollup"
+  );
 
   const sql = useRawTable
     ? `
@@ -136,8 +138,11 @@ export async function queryTimeSeries(
 ): Promise<TimeSeriesPoint[]> {
   const { engine, whereSql, queryParams, useRawTable, timeColumn } =
     buildAnalyticsWhere(filter);
-  const table = getTableName(engine, useRawTable);
-  const isDuck = engine === "duckdb";
+  const table = getAnalyticsTableName(
+    engine,
+    useRawTable ? "sms_records" : "sms_hourly_rollup"
+  );
+  const isDuck = isDuckDbEngine(engine);
 
   const bucketExpr = isDuck
     ? granularity === "day"
@@ -221,8 +226,11 @@ export async function queryDimensionBreakdown(
   const col = DIMENSION_COLUMN_MAP[dimension];
   const global = await queryGlobalKpis(filter);
   const { engine, whereSql, queryParams, useRawTable } = buildAnalyticsWhere(filter);
-  const table = getTableName(engine, useRawTable);
-  const isDuck = engine === "duckdb";
+  const table = getAnalyticsTableName(
+    engine,
+    useRawTable ? "sms_records" : "sms_hourly_rollup"
+  );
+  const isDuck = isDuckDbEngine(engine);
 
   const topReasonExpr = isDuck
     ? "MODE(reason_normalized) FILTER (WHERE reason_normalized != '')"
@@ -347,8 +355,11 @@ export async function queryDependentFacets(
     filter,
     { forceRawTable: forceRaw, excludeDimension: facet }
   );
-  const isDuck = engine === "duckdb";
-  const table = getTableName(engine, useRawTable);
+  const isDuck = isDuckDbEngine(engine);
+  const table = getAnalyticsTableName(
+    engine,
+    useRawTable ? "sms_records" : "sms_hourly_rollup"
+  );
   const countExpr = useRawTable ? "COUNT(*)" : "COALESCE(SUM(total_count), 0)";
   const searchClause = search.trim()
     ? isDuck
@@ -384,8 +395,8 @@ export async function queryAniBreakdown(
   const { engine, whereSql, queryParams } = buildAnalyticsWhere(filter, {
     forceRawTable: true,
   });
-  const isDuck = engine === "duckdb";
-  const table = getTableName(engine, true);
+  const isDuck = isDuckDbEngine(engine);
+  const table = getAnalyticsTableName(engine, "sms_records");
   const col = aniType === "op_ani" ? "op_ani" : "tp_ani";
 
   const anyExpr = (c: string) =>
@@ -456,8 +467,8 @@ export async function queryExplorerMessages(
   const { engine, whereSql, queryParams } = buildAnalyticsWhere(filter, {
     forceRawTable: true,
   });
-  const isDuck = engine === "duckdb";
-  const table = getTableName(engine, true);
+  const isDuck = isDuckDbEngine(engine);
+  const table = getAnalyticsTableName(engine, "sms_records");
   const dir = options.sortDir === "ASC" ? "ASC" : "DESC";
   const op = dir === "DESC" ? "<" : ">";
   const limit = Math.min(Math.max(options.pageSize, 10), 500);
@@ -474,7 +485,7 @@ export async function queryExplorerMessages(
   const tsFormat = (c: string) =>
     isDuck
       ? `strftime(${c}, '%Y-%m-%d %H:%M:%S.%f')`
-      : `formatDateTime(${c}, '%Y-%m-%d %H:%i:%S.%f')`;
+      : `toString(${c})`;
 
   const limitParam = isDuck ? "$pageLimit" : "{pageLimit:UInt32}";
 

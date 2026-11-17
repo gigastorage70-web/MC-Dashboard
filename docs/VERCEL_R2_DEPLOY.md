@@ -1,33 +1,39 @@
-# Deploying on Vercel + Cloudflare R2 ($0 Free Tier)
+# Cloud-Only $0 Deployment Guide (Vercel + Neon + Tinybird)
 
-> **Important Serverless Reality:** Vercel hosts the Next.js UI & REST BFF APIs cleanly (4.5 MB payload cap, 10–60s serverless timeout, stateless filesystem). Because 50–200 MB CSVs and 2M–10M-row analytical databases cannot persist inside Vercel's ephemeral filesystem, a live Vercel deployment requires **3 connections** (all available at \$0/month):
+Deploy the entire MediaCore QoS platform with **zero local workstation running** on a **100% cardless free stack**:
 
-1. **PostgreSQL (`DATABASE_URL`) — 1-Click in Vercel Marketplace (Neon Free, \$0, no card):**
-   - In your Vercel Project -> **Storage** -> **Create Database** -> **Neon Serverless Postgres**.
-   - Vercel injects `DATABASE_URL` automatically, and this app auto-runs `database/postgres/001_initial_schema.sql` on first request.
-2. **Cloudflare R2 (`STORAGE_PROVIDER=r2`) — 10 GB Free, \$0 Egress:**
-   - Create an R2 bucket (e.g. `mc-csv-uploads`) and an R2 API Token (Object Read & Write).
-   - Add this **CORS Policy** on your R2 bucket so browser direct `PUT` uploads work from Vercel:
-     ```json
-     [
-       {
-         "AllowedOrigins": ["https://*.vercel.app", "http://localhost:3000"],
-         "AllowedMethods": ["GET", "PUT", "HEAD"],
-         "AllowedHeaders": ["*"],
-         "MaxAgeSeconds": 3600
-       }
-     ]
+| Layer | Free Service ($0, No Card) | Limits & Capacity |
+|---|---|---|
+| **Web UI & REST APIs** | **Vercel Hobby** | Next.js App Router, 100 GB bandwidth |
+| **PostgreSQL & CSV Object Vault** | **Neon Free** (`winter-queen-87668293`) | `1 GB` Postgres + `5 GB` S3 Object Storage (`mc-csv-uploads`) |
+| **Streaming CSV Ingestion Worker** | **Neon Functions** (`functions/csvworker/index.ts`) | `2048 MiB` RAM, **15-min** `waitUntil` streaming budget |
+| **Columnar Analytical Database** | **Tinybird Free** (Managed ClickHouse) | `10 GB` storage, `1,000` read requests/day, HTTP `/v0/events` + `/v0/sql` |
+
+---
+
+## Setup Steps
+
+1. **Create a Free Tinybird Account & Workspace** (no credit card required):
+   - Sign up at <https://cloud.tinybird.co>.
+   - Copy your workspace **Admin Token** (starts with `p.eyJ...`) and regional API host (for example `https://api.tinybird.co` or `https://api.us-east.tinybird.co`).
+2. **Create the Tinybird Data Sources (`sms_records`, `sms_hourly_rollup`, `ingestion_batches`):**
+   - Put `TINYBIRD_API_URL` and `TINYBIRD_TOKEN` into `.env.local` (or `.env`), then run:
+     ```bash
+     npm run tinybird:setup
      ```
-   - Set in Vercel Environment Variables:
-     - `AUTH_SECRET` (random 32+ char hex string)
-     - `STORAGE_PROVIDER=r2`
-     - `S3_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
-     - `S3_REGION=auto`
-     - `S3_BUCKET=mc-csv-uploads`
-     - `S3_ACCESS_KEY_ID=<your-r2-access-key>`
-     - `S3_SECRET_ACCESS_KEY=<your-r2-secret-key>`
-     - `S3_FORCE_PATH_STYLE=false`
-3. **Streaming Worker + Analytical DB (`DUCKDB_SERVER_URL` & `WORKER_WEBHOOK_URL`):**
-   - Run the worker (`npm run worker:start`) either on a cloud container or directly on your workstation exposed via one free **Cloudflare Tunnel** (`cloudflared tunnel --url http://127.0.0.1:4001`).
-   - Give the worker the same `DATABASE_URL`, `S3_*`, and `WORKER_WEBHOOK_SECRET`, and set `DUCKDB_SERVER_URL=https://<tunnel-url>` and `WORKER_WEBHOOK_URL=https://<tunnel-url>/trigger` in Vercel.
-   - *(Alternatively, if you don't want to manage Cloudflare R2 + Neon + Tunnel for Vercel, running `npm run build && npm run start` locally with a single `cloudflared tunnel --url http://localhost:3000` serves the entire app over HTTPS with zero external setup.)*
+   - *(If your Tinybird workspace is on Forward deployment mode, install the Tinybird CLI and run `tb --cloud deploy` using `tinybird.config.json` and `tinybird/datasources/*.datasource`.)*
+3. **Deploy the Neon Function Worker (`csvworker`):**
+   ```bash
+   neon deploy --env .env.local
+   ```
+   Retrieve its URL with `neon functions get csvworker` (e.g. `https://<branch-id>-csvworker.compute.<region>.aws.neon.tech`).
+4. **Configure Vercel Environment Variables & Redeploy:**
+   - `ANALYTICS_ENGINE=tinybird`
+   - `TINYBIRD_API_URL=https://api.tinybird.co` (matching your Tinybird region)
+   - `TINYBIRD_TOKEN=<your-tinybird-admin-or-rw-token>`
+   - `WORKER_WEBHOOK_URL=https://<branch-id>-csvworker.compute.<region>.aws.neon.tech/trigger`
+   - `WORKER_WEBHOOK_SECRET=<matching-secret-set-on-neon-function>`
+   - Keep your existing Neon Postgres (`DATABASE_URL`), Neon Object Storage (`AWS_*`, `STORAGE_PROVIDER=neon`, `S3_BUCKET=mc-csv-uploads`), and `AUTH_SECRET` vars.
+5. Verify `<vercel-url>/api/health` returns `200 healthy` for `appDb`, `analyticsDb` (`engine: "tinybird"`), and `storage`.
+
+> **Optional Scale-Up:** If you outgrow Tinybird Free, set `ANALYTICS_ENGINE=clickhouse` with `CLICKHOUSE_URL` (and optionally `STORAGE_PROVIDER=r2` with Cloudflare R2 credentials) without touching any UI or query code.
